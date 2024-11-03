@@ -2,6 +2,7 @@ import random
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+from collections import defaultdict
 
 cards = {
     "♢": {"all": (0, 25), "mewtwo": (0, 25), "charizard": (0, 25), "pikachu": (0, 25)},
@@ -76,13 +77,14 @@ def get_empty_collection():
     """
     collection = {}
     for rarity in cards:
-        for key, value in cards[rarity].items():
-            for i in value:
-                collection[i] = {
-                    "rarity": rarity,
-                    "pack": key,
-                    "count": 0
-                }
+        #if rarity in ("♢" , "♢♢", "♢♢♢", "♢♢♢♢"):
+            for key, value in cards[rarity].items():
+                for i in value:
+                    collection[i] = {
+                        "rarity": rarity,
+                        "pack": key,
+                        "count": 0
+                    }
     return collection
 
 
@@ -114,14 +116,15 @@ def open_pack(pack_name):
 
 
 def complete_collection():
-    from collections import defaultdict
-
     collection = get_empty_collection()
     packs_opened = 0
+    pack_points = 0
+    incomplete_packs = ["mewtwo", "charizard", "pikachu"]
 
     # Initialize missing cards per pack using sets for O(1) operations
     missing_per_pack = defaultdict(set)
     all_missing = set()
+    rarest_missing = get_rarest_missing(collection)
 
     for card_num, card_info in collection.items():
         pack = card_info["pack"]
@@ -131,36 +134,55 @@ def complete_collection():
 
     # Function to process opened pack
     def process_pack(pack_name):
-        nonlocal packs_opened
+        nonlocal packs_opened, rarest_missing
         pack_cards = open_pack(pack_name)
         packs_opened += 1
         for card in pack_cards:
-            if collection[card]["count"] == 0:
-                collection[card]["count"] += 1
-                # Remove from specific pack's missing set
-                pack_of_card = collection[card]["pack"]
-                if card in missing_per_pack[pack_of_card]:
-                    missing_per_pack[pack_of_card].remove(card)
-                # Remove from all missing if no longer missing
-                all_missing.discard(card)
-            else:
-                collection[card]["count"] += 1
+            if card in collection:
+                if collection[card]["count"] == 0:
+                    collection[card]["count"] += 1
+                    rarest_missing = get_rarest_missing(collection)
+                    # Remove from specific pack's missing set
+                    pack_of_card = collection[card]["pack"]
+                    if card in missing_per_pack[pack_of_card]:
+                        missing_per_pack[pack_of_card].remove(card)
+                    # Remove from all missing if no longer missing
+                    all_missing.discard(card)
+                else:
+                    collection[card]["count"] += 1
 
-    # Complete each pack individually
-    for pack in packs:
-        while missing_per_pack[pack]:
+    while incomplete_packs:
+        for pack in incomplete_packs:
+            if not missing_per_pack[pack]:
+                incomplete_packs.remove(pack)
+                print(f"Completed {pack} pack after {packs_opened} packs")
+                continue
             process_pack(pack)
-        print(f"{pack.capitalize()} completed. Packs opened: {packs_opened}")
-
-    # Complete all remaining missing cards
-    while all_missing:
-        process_pack("mewtwo")
-    print(f"All cards completed. Packs opened: {packs_opened}")
+            if rarest_missing and pack_points >= rarest_missing["price"] and collection[rarest_missing["card_num"]]["count"] == 0:
+                collection[rarest_missing["card_num"]]["count"] = 1
+                pack_points -= rarest_missing["price"]
+                # Remove the card from missing
+                missing_per_pack[rarest_missing["pack"]].remove(rarest_missing["card_num"])
+                all_missing.discard(rarest_missing["card_num"])
+            pack_points += 5
 
     return packs_opened
 
 
-def get_avg_packs_to_complete(simulations=500):
+def get_rarest_missing(collection):
+    for rarity in ('♛', '☆☆☆', '☆☆', '☆', '♢♢♢♢', '♢♢♢', '♢♢', '♢'):
+        for card_num, card_info in collection.items():
+            if card_info["rarity"] == rarity and card_info["count"] == 0:
+                return {
+                    "card_num": card_num,
+                    "rarity": rarity,
+                    "price": [2500,1500,1250,400,500,150,70,35][('♛', '☆☆☆', '☆☆', '☆', '♢♢♢♢', '♢♢♢', '♢♢', '♢').index(rarity)],
+                    "pack": card_info["pack"]
+                }
+    return None
+
+
+def get_avg_packs_to_complete(simulations=10000):
     total_packs = 0
     max_packs = 0
     min_packs = math.inf
@@ -219,11 +241,10 @@ def get_avg_packs_to_complete(simulations=500):
 def main():
     create_cards()
     create_packs()
-    collection = get_empty_collection()
 
     avg_packs, max_packs, min_packs = get_avg_packs_to_complete()
     print("\nResults:")
-    print(f"Avg packs to complete collection: {avg_packs} (${0.14491304347*avg_packs})")
+    print(f"Avg packs to complete collection: {avg_packs} (${round(0.8695*avg_packs)})")
     print(f"Max packs to complete collection: {max_packs}")
     print(f"Min packs to complete collection: {min_packs}")
 
